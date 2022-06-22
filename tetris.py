@@ -121,6 +121,9 @@ def can_rotate(graph: sg.Graph, blocks: list[int]) -> bool:
 def move_blocks(graph: sg.Graph, blocks: list[int], x: int, y: int):
     for bid in blocks: graph.move_figure(bid, x, y)
 
+def delete_blocks(graph: sg.Graph, blocks: list[int]):
+    for bid in blocks: graph.delete_figure(bid)
+
 def main():
     ### GAME SETUP
     filled = defaultdict(list)
@@ -171,7 +174,7 @@ def main():
     info_text = '🚀 github: wantotri\n' \
                 '📷 ig: @wantotrees'
     main_board.draw_image('assets/logo-small.png', location=(board.width/4, board.height/2+60))
-    main_board.draw_text(info_text, (board.width/2, board.height/2), color='lightgrey',
+    main_board.draw_text(info_text, (board.width/2, board.height/2), color=cell.color,
                          font=('Consolas', 10))
 
     ### GAME LOOP
@@ -208,9 +211,12 @@ def main():
             if timeout is None:
                 window['-PAUSE-'].update('⏸ Pause')
                 timeout = 10
+                main_board.delete_figure(pause_text)
             else:
                 window['-PAUSE-'].update('▶ Resume')
                 timeout = None
+                pause_text = main_board.draw_text('Game Paused', location=(10, board.height-5),
+                    color=cell.color, font=('Consolas', 10), text_location=sg.TEXT_LOCATION_TOP_LEFT)
 
         if timeout is None: continue
 
@@ -245,9 +251,9 @@ def main():
                 main_board.erase()
                 next_board.erase()
                 main_board.draw_text('GAME\nOVER', location=(board.width/2, board.height/2+30),
-                                     font=('Consolas', 24), color='lightgrey')
+                                     font=('Consolas', 24), color=cell.color)
                 main_board.draw_text(f'Your Score: {score}', location=(board.width/2, board.height/2-30),
-                                     font=('Consolas', 12), color='lightgrey')
+                                     font=('Consolas', 12), color=cell.color)
 
                 window['-PAUSE-'].update(visible=False)
                 lose = True
@@ -262,8 +268,7 @@ def main():
                 for row, block_ids in sorted(filled.items()):
                     print(f'row: {row} -> len: {len(filled[row])} -> {filled[row]}')
                     if len(block_ids) == BOARD_WIDTH:
-                        for idx in block_ids:
-                            main_board.delete_figure(idx)
+                        delete_blocks(main_board, block_ids)
                         filled[row] = []
                         score += 10
                         if score and score%ACCELERATION_SCORE == 0:
