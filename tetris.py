@@ -2,7 +2,7 @@ import PySimpleGUI as sg
 from pydantic import BaseModel
 from types import SimpleNamespace
 from time import time
-from random import choice
+from random import choice, randint
 from math import cos, sin, radians
 from collections import defaultdict
 
@@ -26,8 +26,21 @@ class Tetromino(BaseModel):
     shape: list[tuple[int, int]]
     color: str
 
-    def get_pos(self):
+    def get_pos(self, random_rotation=False):
+        if random_rotation: self.rotate(randint(0,3))
         return [(self.anchor[0]+unit[0], self.anchor[1]+unit[1]) for unit in self.shape]
+
+    def rotate(self, n: int = 1):
+        """Rotate the shape -90 degree 'n' times"""
+        ox, oy = self.shape[1]
+        rad = radians(-90*n)
+        new_shape = []
+        for px, py in self.shape:
+            qx = round(ox + cos(rad) * (px - ox) - sin(rad) * (py - oy))
+            qy = round(oy + sin(rad) * (px - ox) + cos(rad) * (py - oy))
+            new_shape.append((qx, qy))
+        self.shape = new_shape
+        return self
 
 # Initialize all the block types
 tetro_T = Tetromino(name='T', anchor=ENTRY_POS, shape=[(0, 0), (0, -1), (0, -2), (1, -1)], color='red')
@@ -100,8 +113,8 @@ def rotate_point(origin, point, angle=-90):
     ox, oy = origin
     px, py = point
     angle = radians(angle)
-    qx = int(ox + cos(angle) * (px - ox) - sin(angle) * (py - oy))
-    qy = int(oy + sin(angle) * (px - ox) + cos(angle) * (py - oy))
+    qx = round(ox + cos(angle) * (px - ox) - sin(angle) * (py - oy))
+    qy = round(oy + sin(angle) * (px - ox) + cos(angle) * (py - oy))
     # this '3' is adjustment to the pySimpleGUI grid system
     return qx+ROTATION_ADJUSTMENT, qy-ROTATION_ADJUSTMENT
 
@@ -143,9 +156,9 @@ def main():
         key='-MAIN_BOARD-')
 
     next_board = sg.Graph(
-        canvas_size=(UNIT_SIZE*3, UNIT_SIZE*4),
-        graph_bottom_left=((BOARD_WIDTH-7)*UNIT_SIZE, (BOARD_HEIGHT-1)*UNIT_SIZE),
-        graph_top_right=((BOARD_WIDTH-4)*UNIT_SIZE, (BOARD_HEIGHT+3)*UNIT_SIZE),
+        canvas_size=(UNIT_SIZE*5, UNIT_SIZE*5),
+        graph_bottom_left=((BOARD_WIDTH-8)*UNIT_SIZE, (BOARD_HEIGHT-1)*UNIT_SIZE),
+        graph_top_right=((BOARD_WIDTH-3)*UNIT_SIZE, (BOARD_HEIGHT+4)*UNIT_SIZE),
         background_color=board.color,
         key='-NEXT_BOARD-')
 
@@ -200,9 +213,9 @@ def main():
             main_board.erase()
             next_board.erase()
             tetro = choice(tetrominoes)
-            blocks = draw_block(main_board, tetro.get_pos(), tetro.color)
+            blocks = draw_block(main_board, tetro.get_pos(True), tetro.color)
             next_tetro = choice(tetrominoes)
-            draw_block(next_board, next_tetro.get_pos(), next_tetro.color)
+            draw_block(next_board, next_tetro.get_pos(True), next_tetro.color)
 
             timeout = 10
             start_time = time()
@@ -299,7 +312,7 @@ def main():
                 blocks = draw_block(main_board, next_tetro.get_pos(), next_tetro.color)
                 next_board.erase()
                 next_tetro = choice(tetrominoes)
-                draw_block(next_board, next_tetro.get_pos(), next_tetro.color)
+                draw_block(next_board, next_tetro.get_pos(True), next_tetro.color)
 
             start_time = time()
 
