@@ -164,12 +164,17 @@ def main():
 
     newgame_btn = sg.Button('⚡ Start', size=(11,1), key='-NEWGAME-')
     pause_btn = sg.Button('⏸ Pause', size=(11,1), key='-PAUSE-', visible=False)
-    prompt_text = sg.Text('Click "Start" to play\n', key='-TEXT1-')
+    prompt_text = sg.Text('Click "Start" to play\n', key='-TEXT1-', text_color='lightgrey')
+    help_str = 'Controls\n' \
+               'Moves   : arrow keys (⬅⬇➡)\n' \
+               'Rotate  : r or R key'
+    help_text = sg.Text(help_str, key='-TEXT1-', text_color='lightgrey', font=('Consolas', 8))
 
     layout = [
         [newgame_btn, pause_btn],
         [prompt_text],
-        [main_board, next_board]
+        [main_board, next_board],
+        [help_text]
     ]
 
     window = sg.Window(
@@ -190,6 +195,9 @@ def main():
     main_board.draw_text(info_text, (board.width/2, board.height/2), color=cell.color,
                          font=('Consolas', 10))
 
+    next_board.draw_text('Next', location=((BOARD_WIDTH-8)*UNIT_SIZE+5, (BOARD_HEIGHT+4)*UNIT_SIZE),
+        font=('Consolas', 10), color='lightgrey', text_location=sg.TEXT_LOCATION_TOP_LEFT)
+
     ### GAME LOOP
     start_time = time()
     timeout = None
@@ -201,6 +209,7 @@ def main():
         if event == sg.WIN_CLOSED: break
 
         if event == '-NEWGAME-' or event in 'nN':
+            print('\n 🚀 Creating a new game ...')
             filled = defaultdict(list)
             lose = False
             score = 0
@@ -211,14 +220,15 @@ def main():
             window['-TEXT1-'].update('Score: 0\nSpeed: 1')
 
             main_board.erase()
-            next_board.erase()
+            # next_board.erase()
             tetro = choice(tetrominoes)
             blocks = draw_block(main_board, tetro.get_pos(True), tetro.color)
             next_tetro = choice(tetrominoes)
-            draw_block(next_board, next_tetro.get_pos(True), next_tetro.color)
+            next_blocks = draw_block(next_board, next_tetro.get_pos(True), next_tetro.color)
 
             timeout = 10
             start_time = time()
+            print(' 🎉 New game created. Enjoy! 😁\n')
 
         if event == '-PAUSE-' or event in 'pP':
             if timeout is None:
@@ -271,15 +281,15 @@ def main():
                 window['-PAUSE-'].update(visible=False)
                 lose = True
                 timeout = None
+                print(' ☠  Game Over')
+                print(f' Your score: {score}')
 
             else:
                 for bid in blocks:
                     _, (_, b) = main_board.get_bounding_box(bid)
                     filled[int(b/UNIT_SIZE)].append(bid)
 
-                print('-'*20)
                 for row, block_ids in sorted(filled.items()):
-                    print(f'row: {row} -> len: {len(filled[row])} -> {filled[row]}')
                     if len(block_ids) == BOARD_WIDTH:
                         delete_blocks(main_board, block_ids)
                         filled[row] = []
@@ -310,9 +320,9 @@ def main():
                         filled[row] = []
 
                 blocks = draw_block(main_board, next_tetro.get_pos(), next_tetro.color)
-                next_board.erase()
+                delete_blocks(next_board, next_blocks)
                 next_tetro = choice(tetrominoes)
-                draw_block(next_board, next_tetro.get_pos(True), next_tetro.color)
+                next_blocks = draw_block(next_board, next_tetro.get_pos(True), next_tetro.color)
 
             start_time = time()
 

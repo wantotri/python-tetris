@@ -13,7 +13,12 @@ In this project root directory:
 ## In-game Keyboard Shortcut
 * Create New Game: key `n` or `N`
 * Pause/Resume the game: key `p` or `P`
-* Move block to left: left arrow key `(⬅)`
-* Move block to right: right arrow key `(➡)`
-* Move block to bottom: down arrow key `(⬇)`
+* Move block left: left arrow key `(⬅)`
+* Move block right: right arrow key `(➡)`
+* Move block bottom: down arrow key `(⬇)`
 * Rotate block: key `r` or `R`
+
+## Create Stand Alone Executable
+* Install dev dependencies `pip install -r requirements_dev.txt`
+* Run `pyinstaller --onefile tetris.py`
+* Copy `assets` dir to `dist` dir

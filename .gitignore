@@ -1,3 +1,7 @@
 venv/
 examples/
 __pycache__/
+build/
+dist/
+tetris.spec
+*.zip
