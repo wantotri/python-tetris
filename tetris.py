@@ -54,11 +54,8 @@ tetro_Z = Tetromino(name='Z', anchor=ENTRY_POS, shape=[(0, 0), (0, -1), (-1, -1)
 tetrominoes = [tetro_T, tetro_L, tetro_J, tetro_O, tetro_I, tetro_S, tetro_Z]
 
 def pos_to_pixel(x: int, y: int):
-    width = UNIT_SIZE
-    height = UNIT_SIZE
-    border = BORDER_SIZE
-    tl = ((x*width)+border, ((y+1)*height)-border)
-    br = (((x+1)*width)-border, (y*height)+border)
+    tl = ( (x * UNIT_SIZE) + BORDER_SIZE, ((y+1) * UNIT_SIZE) - BORDER_SIZE )
+    br = ( ((x+1) * UNIT_SIZE) - BORDER_SIZE, (y * UNIT_SIZE) + BORDER_SIZE )
     return tl, br
 
 def draw_rectangle(graph: sg.Graph, x: int, y: int, color=None):
@@ -109,24 +106,23 @@ def can_move_down(graph: sg.Graph, blocks: list[int]) -> bool:
 
 def rotate_point(origin, point, angle=-90):
     """Rotate a point counterclockwise by a given angle around a given origin.
-    The angle should be given in radians."""
+    The angle should be given in degree."""
     ox, oy = origin
     px, py = point
     angle = radians(angle)
     qx = round(ox + cos(angle) * (px - ox) - sin(angle) * (py - oy))
     qy = round(oy + sin(angle) * (px - ox) + cos(angle) * (py - oy))
-    # this '3' is adjustment to the pySimpleGUI grid system
+    # this constant is adjustment to the pySimpleGUI grid system
     return qx+ROTATION_ADJUSTMENT, qy-ROTATION_ADJUSTMENT
 
 def can_rotate(graph: sg.Graph, blocks: list[int]) -> bool:
     # Check the origin againts the board boundaries
     origin, (r, b) = graph.get_bounding_box(blocks[1])
-    if origin[0] < 10 or b <10 or r > board.width-10: return False
-
+    if origin[0] < 10 or b < 10 or r > board.width-10: return False
     for block_id in blocks:
         tl, _ = graph.get_bounding_box(block_id)
         x, y = rotate_point(origin, tl)
-        if x < 0: return False
+        if y < 0 or x < 0 or x > board.width: return False
         figures = graph.get_figures_at_location((x+1, y+1))
         if figures and figures[0] not in blocks: return False
     return True
@@ -138,13 +134,6 @@ def delete_blocks(graph: sg.Graph, blocks: list[int]):
     for bid in blocks: graph.delete_figure(bid)
 
 def main():
-    ### GAME SETUP
-    filled = defaultdict(list)
-    lose = False
-    score = 0
-    game_speed = INITIAL_GAME_SPEED
-    speed_counter = 1
-
     ### GAME GUI
     sg.theme('DarkAmber')
 
@@ -164,11 +153,11 @@ def main():
 
     newgame_btn = sg.Button('⚡ Start', size=(11,1), key='-NEWGAME-')
     pause_btn = sg.Button('⏸ Pause', size=(11,1), key='-PAUSE-', visible=False)
-    prompt_text = sg.Text('Click "Start" to play\n', key='-TEXT1-', text_color='lightgrey')
+    prompt_text = sg.Text('Click "Start" to play\n', key='-TEXT1-', text_color=cell.color)
     help_str = 'Controls\n' \
-               'Moves   : arrow keys (⬅⬇➡)\n' \
-               'Rotate  : r or R key'
-    help_text = sg.Text(help_str, key='-TEXT1-', text_color='lightgrey', font=('Consolas', 8))
+               'Moves  : arrow keys (⬅⬇➡)\n' \
+               'Rotate : r or R key'
+    help_text = sg.Text(help_str, key='-TEXT1-', text_color=cell.color, font=('Consolas', 8))
 
     layout = [
         [newgame_btn, pause_btn],
@@ -192,15 +181,12 @@ def main():
     info_text = '🚀 github: wantotri\n' \
                 '📷 ig: @wantotrees'
     main_board.draw_image('assets/logo-small.png', location=(board.width/4, board.height/2+60))
-    main_board.draw_text(info_text, (board.width/2, board.height/2), color=cell.color,
-                         font=('Consolas', 10))
-
-    next_board.draw_text('Next', location=((BOARD_WIDTH-8)*UNIT_SIZE+5, (BOARD_HEIGHT+4)*UNIT_SIZE),
-        font=('Consolas', 10), color='lightgrey', text_location=sg.TEXT_LOCATION_TOP_LEFT)
+    main_board.draw_text(info_text, (board.width/2, board.height/2), color=cell.color, font=('Consolas', 10))
 
     ### GAME LOOP
     start_time = time()
     timeout = None
+    lose = True
 
     # Event Loop to process "events" and get the "values" of the inputs
     while True:
@@ -220,7 +206,10 @@ def main():
             window['-TEXT1-'].update('Score: 0\nSpeed: 1')
 
             main_board.erase()
-            # next_board.erase()
+            next_board.erase()
+            next_board.draw_text('Next', location=((BOARD_WIDTH-8)*UNIT_SIZE+5, (BOARD_HEIGHT+4)*UNIT_SIZE),
+                font=('Consolas', 10), color=cell.color, text_location=sg.TEXT_LOCATION_TOP_LEFT)
+
             tetro = choice(tetrominoes)
             blocks = draw_block(main_board, tetro.get_pos(True), tetro.color)
             next_tetro = choice(tetrominoes)
@@ -230,7 +219,7 @@ def main():
             start_time = time()
             print(' 🎉 New game created. Enjoy! 😁\n')
 
-        if event == '-PAUSE-' or event in 'pP':
+        if not lose and (event == '-PAUSE-' or event in 'pP'):
             if timeout is None:
                 window['-PAUSE-'].update('⏸ Pause')
                 timeout = 10
