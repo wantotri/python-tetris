@@ -6,19 +6,15 @@ from random import choice, randint
 from math import cos, sin, radians
 from collections import defaultdict
 
-UNIT_SIZE = 20
-BORDER_SIZE = 4
 BOARD_WIDTH = 10
 BOARD_HEIGHT = 24
-ENTRY_POS = (int((BOARD_WIDTH-1)/2), BOARD_HEIGHT+2)
-INITIAL_GAME_SPEED = 0.4  # smaller = faster
-ACCELERATION_FACTOR = 0.1
-ACCELERATION_SCORE = 100
+ENTRY_POS = (round((BOARD_WIDTH - 1) / 2), BOARD_HEIGHT + 2)
 ROTATION_ADJUSTMENT = 2
 
-cell = SimpleNamespace(size=UNIT_SIZE, color='lightgray')
-border = SimpleNamespace(size=BORDER_SIZE, color='gray')
-board = SimpleNamespace(width=UNIT_SIZE*BOARD_WIDTH, height=UNIT_SIZE*BOARD_HEIGHT, color='black')
+cell = SimpleNamespace(size=20, color='lightgray')
+border = SimpleNamespace(size=4, color='gray')
+board = SimpleNamespace(width=cell.size * BOARD_WIDTH, height=cell.size * BOARD_HEIGHT, color='black')
+speed = SimpleNamespace(initial=0.4, factor=0.1, step=100)
 
 class Tetromino(BaseModel):
     name: str
@@ -28,12 +24,12 @@ class Tetromino(BaseModel):
 
     def get_pos(self, random_rotation=False):
         if random_rotation: self.rotate(randint(0,3))
-        return [(self.anchor[0]+unit[0], self.anchor[1]+unit[1]) for unit in self.shape]
+        return [(self.anchor[0] + unit[0], self.anchor[1] + unit[1]) for unit in self.shape]
 
     def rotate(self, n: int = 1):
         """Rotate the shape -90 degree 'n' times"""
         ox, oy = self.shape[1]
-        rad = radians(-90*n)
+        rad = radians(-90 * n)
         new_shape = []
         for px, py in self.shape:
             qx = round(ox + cos(rad) * (px - ox) - sin(rad) * (py - oy))
@@ -54,21 +50,23 @@ tetro_Z = Tetromino(name='Z', anchor=ENTRY_POS, shape=[(0, 0), (0, -1), (-1, -1)
 tetrominoes = [tetro_T, tetro_L, tetro_J, tetro_O, tetro_I, tetro_S, tetro_Z]
 
 def pos_to_pixel(x: int, y: int):
-    tl = ( (x * UNIT_SIZE) + BORDER_SIZE, ((y+1) * UNIT_SIZE) - BORDER_SIZE )
-    br = ( ((x+1) * UNIT_SIZE) - BORDER_SIZE, (y * UNIT_SIZE) + BORDER_SIZE )
-    return tl, br
+    left = (x * cell.size) + border.size
+    top = ((y + 1) * cell.size) - border.size
+    right = ((x + 1) * cell.size) - border.size
+    bottom = (y * cell.size) + border.size
+    return (left, top), (right, bottom)
 
 def draw_rectangle(graph: sg.Graph, x: int, y: int, color=None):
-    tl, br = pos_to_pixel(x, y)
+    top_left, bottom_right = pos_to_pixel(x, y)
     return graph.draw_rectangle(
-        top_left=tl,
-        bottom_right=br,
+        top_left=top_left,
+        bottom_right=bottom_right,
         fill_color=cell.color,
         line_color=border.color if color is None else color,
         line_width=border.size)
 
-def draw_block(graph: sg.Graph, pos_list, color=None):
-    return [draw_rectangle(graph, pos[0], pos[1], color) for pos in pos_list]
+def draw_block(graph: sg.Graph, positions, color=None):
+    return [draw_rectangle(graph, pos[0], pos[1], color) for pos in positions]
 
 def get_block_bounding_box(graph: sg.Graph, block_id_list):
     l, t, r, b = board.width, 0, 0, board.height
@@ -84,15 +82,15 @@ def can_move_left(graph: sg.Graph, blocks: list[int]) -> bool:
     for block_id in blocks:
         (l, _), (_, b) = graph.get_bounding_box(block_id)
         if l < 10: return False
-        figures = graph.get_figures_at_location((l-UNIT_SIZE+1, b+1))
+        figures = graph.get_figures_at_location((l + 1 - cell.size, b + 1))
         if figures and figures[0] not in blocks: return False
     return True
 
 def can_move_right(graph: sg.Graph, blocks: list[int]) -> bool:
     for block_id in blocks:
         (l, _), (r, b) = graph.get_bounding_box(block_id)
-        if r > board.width-10: return False
-        figures = graph.get_figures_at_location((l+UNIT_SIZE+1, b+1))
+        if r > board.width - 10: return False
+        figures = graph.get_figures_at_location((l + 1 + cell.size, b + 1))
         if figures and figures[0] not in blocks: return False
     return True
 
@@ -100,7 +98,7 @@ def can_move_down(graph: sg.Graph, blocks: list[int]) -> bool:
     for block_id in blocks:
         (l, _), (_, b) = graph.get_bounding_box(block_id)
         if b < 10: return False
-        figures = graph.get_figures_at_location((l+1, b-UNIT_SIZE+1))
+        figures = graph.get_figures_at_location((l + 1, b + 1 - cell.size))
         if figures and figures[0] not in blocks: return False
     return True
 
@@ -113,12 +111,12 @@ def rotate_point(origin, point, angle=-90):
     qx = round(ox + cos(angle) * (px - ox) - sin(angle) * (py - oy))
     qy = round(oy + sin(angle) * (px - ox) + cos(angle) * (py - oy))
     # this constant is adjustment to the pySimpleGUI grid system
-    return qx+ROTATION_ADJUSTMENT, qy-ROTATION_ADJUSTMENT
+    return qx + ROTATION_ADJUSTMENT, qy - ROTATION_ADJUSTMENT
 
 def can_rotate(graph: sg.Graph, blocks: list[int]) -> bool:
     # Check the origin againts the board boundaries
     origin, (r, b) = graph.get_bounding_box(blocks[1])
-    if origin[0] < 10 or b < 10 or r > board.width-10: return False
+    if origin[0] < 10 or b < 10 or r > board.width - 10: return False
     for block_id in blocks:
         tl, _ = graph.get_bounding_box(block_id)
         x, y = rotate_point(origin, tl)
@@ -145,19 +143,20 @@ def main():
         key='-MAIN_BOARD-')
 
     next_board = sg.Graph(
-        canvas_size=(UNIT_SIZE*5, UNIT_SIZE*5),
-        graph_bottom_left=((BOARD_WIDTH-8)*UNIT_SIZE, (BOARD_HEIGHT-1)*UNIT_SIZE),
-        graph_top_right=((BOARD_WIDTH-3)*UNIT_SIZE, (BOARD_HEIGHT+4)*UNIT_SIZE),
+        canvas_size=(cell.size * 5, cell.size * 5),
+        graph_bottom_left=((BOARD_WIDTH - 8) * cell.size, (BOARD_HEIGHT - 1) * cell.size),
+        graph_top_right=((BOARD_WIDTH - 3) * cell.size, (BOARD_HEIGHT + 4) * cell.size),
         background_color=board.color,
         key='-NEXT_BOARD-')
 
-    newgame_btn = sg.Button('⚡ Start', size=(11,1), key='-NEWGAME-')
-    pause_btn = sg.Button('⏸ Pause', size=(11,1), key='-PAUSE-', visible=False)
+    newgame_btn = sg.Button('⚡ Start', size=(11, 1), key='-NEWGAME-')
+    pause_btn = sg.Button('⏸ Pause', size=(11, 1), key='-PAUSE-', visible=False)
     prompt_text = sg.Text('Click "Start" to play\n', key='-TEXT1-', text_color=cell.color)
-    help_str = 'Controls\n' \
-               'Moves  : arrow keys (⬅⬇➡)\n' \
-               'Rotate : r or R key'
-    help_text = sg.Text(help_str, key='-TEXT1-', text_color=cell.color, font=('Consolas', 8))
+    help_text = sg.Text(
+        text='Controls\nMoves  : arrow keys (⬅⬇➡)\nRotate : r or R key',
+        key='-TEXT1-',
+        text_color=cell.color,
+        font=('Consolas', 8))
 
     layout = [
         [newgame_btn, pause_btn],
@@ -169,7 +168,7 @@ def main():
     window = sg.Window(
         title='Python Tetris',
         layout=layout,
-        font=('Helvetica', 10),
+        font=('Consolas', 10),
         return_keyboard_events=True,
         finalize=True)
 
@@ -178,10 +177,12 @@ def main():
     window.bind("<KeyPress-Right>", "LongRight")
 
     # Initial Screen Banner
-    info_text = '🚀 github: wantotri\n' \
-                '📷 ig: @wantotrees'
-    main_board.draw_image('assets/logo-small.png', location=(board.width/4, board.height/2+60))
-    main_board.draw_text(info_text, (board.width/2, board.height/2), color=cell.color, font=('Consolas', 10))
+    main_board.draw_image(filename='assets/logo-small.png', location=(board.width / 4, (board.height / 2) + 60))
+    main_board.draw_text(
+        text='🚀 github: wantotri\n📷 ig: @wantotrees',
+        location=(board.width / 2, board.height / 2),
+        color=cell.color,
+        font=('Consolas', 10))
 
     ### GAME LOOP
     start_time = time()
@@ -199,7 +200,7 @@ def main():
             filled = defaultdict(list)
             lose = False
             score = 0
-            game_speed = INITIAL_GAME_SPEED
+            game_speed = speed.initial
             speed_counter = 1
 
             window['-PAUSE-'].update(visible=True)
@@ -207,8 +208,12 @@ def main():
 
             main_board.erase()
             next_board.erase()
-            next_board.draw_text('Next', location=((BOARD_WIDTH-8)*UNIT_SIZE+5, (BOARD_HEIGHT+4)*UNIT_SIZE),
-                font=('Consolas', 10), color=cell.color, text_location=sg.TEXT_LOCATION_TOP_LEFT)
+            next_board.draw_text(
+                text='Next',
+                location=((BOARD_WIDTH - 8) * cell.size + 5, (BOARD_HEIGHT + 4) * cell.size),
+                font=('Consolas', 10),
+                color=cell.color,
+                text_location=sg.TEXT_LOCATION_TOP_LEFT)
 
             tetro = choice(tetrominoes)
             blocks = draw_block(main_board, tetro.get_pos(True), tetro.color)
@@ -227,8 +232,12 @@ def main():
             else:
                 window['-PAUSE-'].update('▶ Resume')
                 timeout = None
-                pause_text = main_board.draw_text('Game Paused', location=(10, board.height-5),
-                    color=cell.color, font=('Consolas', 10), text_location=sg.TEXT_LOCATION_TOP_LEFT)
+                pause_text = main_board.draw_text(
+                    text='Game Paused',
+                    location=(10, board.height - 5),
+                    color=cell.color,
+                    font=('Consolas', 10),
+                    text_location=sg.TEXT_LOCATION_TOP_LEFT)
 
         if timeout is None: continue
 
@@ -242,30 +251,36 @@ def main():
 
         if event == 'LongLeft':
             if can_move_left(main_board, blocks):
-                move_blocks(main_board, blocks, -UNIT_SIZE, 0)
+                move_blocks(main_board, blocks, -cell.size, 0)
 
         if event == 'LongRight':
             if can_move_right(main_board, blocks):
-                move_blocks(main_board, blocks, UNIT_SIZE, 0)
+                move_blocks(main_board, blocks, cell.size, 0)
 
         if event == 'LongDown':
             if can_move_down(main_board, blocks):
-                move_blocks(main_board, blocks, 0, -UNIT_SIZE)
+                move_blocks(main_board, blocks, 0, -cell.size)
 
         # GAME TICKS
         if not lose and time() - start_time >= game_speed:
             (_, t), _ = get_block_bounding_box(main_board, blocks)
 
             if can_move_down(main_board, blocks):
-                move_blocks(main_board, blocks, 0, -UNIT_SIZE)
+                move_blocks(main_board, blocks, 0, -cell.size)
 
             elif t >= board.height-10:
                 main_board.erase()
                 next_board.erase()
-                main_board.draw_text('GAME\nOVER', location=(board.width/2, board.height/2+30),
-                                     font=('Consolas', 24), color=cell.color)
-                main_board.draw_text(f'Your Score: {score}', location=(board.width/2, board.height/2-30),
-                                     font=('Consolas', 12), color=cell.color)
+                main_board.draw_text(
+                    text='GAME\nOVER',
+                    location=(board.width / 2, board.height / 2 + 30),
+                    font=('Consolas', 24),
+                    color=cell.color)
+                main_board.draw_text(
+                    text=f'Your Score: {score}',
+                    location=(board.width / 2, board.height / 2 - 30),
+                    font=('Consolas', 12),
+                    color=cell.color)
 
                 window['-PAUSE-'].update(visible=False)
                 lose = True
@@ -276,36 +291,36 @@ def main():
             else:
                 for bid in blocks:
                     _, (_, b) = main_board.get_bounding_box(bid)
-                    filled[int(b/UNIT_SIZE)].append(bid)
+                    filled[round(b / cell.size)].append(bid)
 
                 for row, block_ids in sorted(filled.items()):
                     if len(block_ids) == BOARD_WIDTH:
                         delete_blocks(main_board, block_ids)
                         filled[row] = []
                         score += 10
-                        if score and score%ACCELERATION_SCORE == 0:
-                            game_speed = game_speed - (game_speed*ACCELERATION_FACTOR)
+                        if score and score % speed.step == 0:
+                            game_speed = game_speed - (game_speed * speed.factor)
                             speed_counter += 1
                         window['-TEXT1-'].update(f'Score: {score}\nSpeed: {speed_counter}')
 
-                    elif row-4 >= 0 and not filled[row-4]:
-                        move_blocks(main_board, block_ids, 0, -UNIT_SIZE*4)
-                        filled[row-4] = filled[row]
+                    elif row - 4 >= 0 and not filled[row - 4]:
+                        move_blocks(main_board, block_ids, 0, -cell.size * 4)
+                        filled[row - 4] = filled[row]
                         filled[row] = []
 
-                    elif row-3 >= 0 and not filled[row-3]:
-                        move_blocks(main_board, block_ids, 0, -UNIT_SIZE*3)
-                        filled[row-3] = filled[row]
+                    elif row - 3 >= 0 and not filled[row - 3]:
+                        move_blocks(main_board, block_ids, 0, -cell.size * 3)
+                        filled[row - 3] = filled[row]
                         filled[row] = []
 
-                    elif row-2 >= 0 and not filled[row-2]:
-                        move_blocks(main_board, block_ids, 0, -UNIT_SIZE*2)
-                        filled[row-2] = filled[row]
+                    elif row - 2 >= 0 and not filled[row - 2]:
+                        move_blocks(main_board, block_ids, 0, -cell.size * 2)
+                        filled[row - 2] = filled[row]
                         filled[row] = []
 
-                    elif row-1 >= 0 and not filled[row-1]:
-                        move_blocks(main_board, block_ids, 0, -UNIT_SIZE*1)
-                        filled[row-1] = filled[row]
+                    elif row-1 >= 0 and not filled[row - 1]:
+                        move_blocks(main_board, block_ids, 0, -cell.size * 1)
+                        filled[row - 1] = filled[row]
                         filled[row] = []
 
                 blocks = draw_block(main_board, next_tetro.get_pos(), next_tetro.color)
